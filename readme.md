@@ -7,7 +7,7 @@
 
 > 企業級 IoT 雲端影像管理平台的前端架構紀錄，涵蓋 WebRTC / HLS 雙協議播放器、平面圖攝影機定位編輯器、三管道事件通知系統的設計思路與實作細節。
 
-🔗 **[作品集網站](https://katy-tsai.github.io/portfolio)** · **[GitHub Profile](https://github.com/katy-tsai)**
+
 
 ---
 
