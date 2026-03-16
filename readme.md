@@ -1,4 +1,30 @@
-# 📹 Live View Player — WebRTC & HLS 雙協議影像播放系統
+# VMS 雲端影像管理系統 — 前端架構文件
+
+[![React](https://img.shields.io/badge/React.js-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://reactjs.org)
+[![WebRTC](https://img.shields.io/badge/WebRTC-333333?style=flat-square&logo=webrtc&logoColor=white)](https://webrtc.org)
+[![HLS](https://img.shields.io/badge/HLS.js-FF2D20?style=flat-square&logoColor=white)](https://github.com/video-dev/hls.js)
+[![Konva](https://img.shields.io/badge/Konva.js-0D6EFD?style=flat-square&logoColor=white)](https://konvajs.org)
+
+> 企業級 IoT 雲端影像管理平台的前端架構紀錄，涵蓋 WebRTC / HLS 雙協議播放器、平面圖攝影機定位編輯器、三管道事件通知系統的設計思路與實作細節。
+
+🔗 **[作品集網站](https://katy-tsai.github.io/portfolio)** · **[GitHub Profile](https://github.com/katy-tsai)**
+
+---
+
+## 📋 模組目錄
+
+| 模組 | 說明 |
+|------|------|
+| [🎬 Live View 播放器](#-系統架構總覽) | WebRTC + HLS 雙協議、元件架構、狀態機 |
+| [🪝 Custom Hooks](#-custom-hooks-說明) | useVideo / useZoom / useCapture / useCanvasRecord / useActiveMouse |
+| [🗺️ 平面圖編輯器](#️-平面圖攝影機定位編輯器) | Konva.js 扇形視角、座標系統、截圖展示 |
+| [🔔 事件通知系統](#-事件通知系統) | Web Push / LINE OAuth / Email 三管道訂閱 |
+| [📊 DMP 圖表系統](#-dmp-數據視覺化--vega-lite-schema-驅動圖表系統) | Vega-Lite Schema 解析器、Recharts 動態渲染 |
+| [🛠 技術棧](#-技術棧) | 完整技術清單 |
+
+---
+
+## 📹 Live View Player — WebRTC & HLS 雙協議影像播放系統
 
 > 雲端影像管理平台的核心播放模組，支援 WebRTC 即時串流與 HLS 點播，具備多通道播放、數位縮放、截圖、錄影等完整功能。
 
@@ -405,12 +431,127 @@ flowchart TD
 
 ---
 
+## 📊 DMP 數據視覺化 — Vega-Lite Schema 驅動圖表系統
+
+DMP 設備數據分析平台的圖表引擎，自行設計並實作 Vega-Lite JSON Schema 解析器，橋接 Vega-Lite 宣告式語法與 Recharts 元件，統一圖表配置介面。
+
+### 設計理念
+
+傳統直接使用 Recharts 的方式，每種圖表需要撰寫不同的 JSX 結構，難以統一管理與讓用戶自訂。本系統改以 **Vega-Lite 格式的 JSON spec** 描述圖表，由解析層轉譯為對應的 Recharts 元件，實現宣告式圖表配置。
+
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+  "mark": { "type": "line", "tooltip": true },
+  "encoding": {
+    "x": { "field": "day" },
+    "y": { "field": "event", "type": "quantitative" }
+  }
+}
+```
+
+只需修改 JSON，即可切換圖表類型、資料欄位與樣式，用戶可自行配置首頁儀表板的圖表組合。
+
+### 系統架構
+
+```mermaid
+flowchart TD
+  A[Vega-Lite JSON Spec] --> B[chartSpceUtil\n解析 spec]
+  B --> C[chartDataUtil\n資料轉換]
+  C --> D{chartType}
+  D -- Line --> E[LineChart]
+  D -- Bar --> F[BarChart]
+  D -- Arc --> G[PieChart]
+  D -- Layer --> H[ComposedChart]
+  E & F & G & H --> I[Recharts 渲染]
+```
+
+### 三層處理流程
+
+```mermaid
+flowchart LR
+  A[JSON Spec 輸入] --> B[parseSpec\n規格解析層]
+  B --> C[chartDataGenerate\n資料處理層]
+  C --> D[ReChart\n元件渲染層]
+
+  subgraph 規格解析層
+    B1[解析 mark → chartType]
+    B2[解析 encoding → xAxis / yAxis / colorAxis]
+    B3[解析 transform / layer]
+  end
+
+  subgraph 資料處理層
+    C1[aggregate 聚合運算]
+    C2[groupBy 分組]
+    C3[colorAxis 多系列展開]
+    C4[d3-scale Y 軸刻度計算]
+  end
+```
+
+### 核心模組說明
+
+#### `chartSpceUtil.js` — 規格解析層
+
+將 Vega-Lite spec 解析為標準化的內部格式，處理各種簡寫與預設值：
+
+| 函式 | 說明 |
+|------|------|
+| `parseSpec(spec)` | 主入口，解析完整 spec 物件 |
+| `getChartType(mark)` | 將 mark type 轉為對應 Chart 元件名稱 |
+| `getXAxis / getYAxis` | 解析軸向配置，處理 vegaType → Recharts type 映射 |
+| `getColorAxis` | 解析色彩映射配置（多系列資料） |
+| `getLayers` | 解析 layer 複合圖表配置 |
+
+#### `chartDataUtil.js` — 資料處理層
+
+根據 spec 對原始資料進行轉換，對應 Vega-Lite 的 transform 規格：
+
+| 函式 | 說明 |
+|------|------|
+| `chartDataGenerate` | 主入口，依 chartType 選擇資料處理流程 |
+| `transformData` | 執行 groupby + aggregate 資料轉換 |
+| `aggregatData` | 多欄位聚合（sum、count 等） |
+| `colorProcessor` | 依 scale domain/range 映射色彩 |
+| `getChartYTicks` | 使用 d3-scale 計算 Y 軸刻度，自動處理最大值格式化 |
+| `gradientColors` | 產生 SVG linearGradient 漸層定義 |
+
+#### `ReChart.js` — 元件渲染層
+
+依解析後的 `chartType` 動態選擇並渲染對應 Recharts 元件：
+
+```
+chartType → charts[`${chartType}Chart`] → 動態元件渲染
+```
+
+支援透過 `react-resize-detector` 自動偵測容器尺寸，實現 RWD 響應式圖表。
+
+### 支援圖表類型
+
+| chartType | 對應元件 | 說明 |
+|-----------|----------|------|
+| `line` | LineChart | 折線圖，支援多系列、漸層填充 |
+| `bar` | BarChart | 長條圖，支援水平 / 垂直方向 |
+| `arc` | PieChart | 圓餅圖，支援百分比聚合 |
+| `layer` | ComposedChart | 複合圖，多種圖表類型疊加 |
+| `point` | ScatterChart | 散點圖，支援 size / color 映射 |
+
+### 技術亮點
+
+- **Vega-Lite 相容**：直接沿用 Vega-Lite JSON Schema 格式，規格有完整文件可參考，降低配置學習成本
+- **宣告式驅動**：圖表邏輯與 UI 元件完全解耦，新增圖表類型只需擴充解析規則，不需改動渲染層
+- **彈性色彩映射**：支援 `scale.domain / range` 精確指定色彩，或自動循環使用預設色盤
+- **d3-scale 整合**：Y 軸刻度計算使用 d3-scale，確保數值分布美觀合理
+- **用戶自訂儀表板**：spec 以 JSON 儲存，用戶可自行選擇圖表類型與資料欄位，動態組合首頁視圖
+
+---
+
 ## 🛠 技術棧
 
 | 類別 | 技術 |
 |------|------|
 | 前端框架 | React.js、Redux |
 | 串流協議 | WebRTC、HLS (hls.js) |
+| 圖表視覺化 | Recharts、Vega-Lite Schema、d3-scale |
 | Canvas 繪圖 | Konva.js、Canvas API |
 | 錄影 | RecordRTC、Canvas API |
 | 動畫 | requestAnimationFrame |
@@ -429,3 +570,4 @@ flowchart TD
 - **Canvas 錄影**：支援將 video 畫面透過 Canvas 錄製輸出，解決部分瀏覽器無法直接錄製 HLS 的限制
 - **平面圖編輯器**：使用 Konva.js 實作攝影機定位與扇形視角編輯，座標以相對比例儲存確保跨裝置一致性
 - **多管道通知系統**：整合 Web Push（Service Worker）、LINE Messaging API、Email 三種通知管道，支援細粒度的設備 × 事件類型 × 通知方式訂閱管理
+- **Vega-Lite Schema 解析器**：自行實作 Vega-Lite JSON spec 解析層，橋接宣告式圖表配置與 Recharts 渲染，實現用戶自訂儀表板，體現跨工具抽象設計能力
